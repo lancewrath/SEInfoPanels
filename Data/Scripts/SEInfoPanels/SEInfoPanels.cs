@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Sandbox.Common.ObjectBuilders.Definitions;
+using Sandbox.Game;
 using Sandbox.ModAPI;
 using Sandbox.ModAPI.Interfaces;
 using SpaceEngineers.Game.ModAPI;
@@ -12,6 +13,7 @@ using VRage.Game.Components;
 using VRage.Game.Entities;
 using VRage.Game.ModAPI;
 using VRage.ModAPI;
+using VRageMath;
 
 namespace SEInfoPanels
 {
@@ -470,6 +472,33 @@ namespace SEInfoPanels
                         lcdInfoBases.Add(new RefineryInfo(this, name));
                     }
                 }
+                if (data[i].Contains("[BINFO:"))
+                {
+                    string[] dinfo = data[i].Split(":"[0]);
+                    if (dinfo.Length > 1)
+                    {
+                        string name = dinfo[1].Replace("]", "");
+                        lcdInfoBases.Add(new BatteryInfo(this, name));
+                    }
+                }
+                if (data[i].Contains("[REACTOR:"))
+                {
+                    string[] dinfo = data[i].Split(":"[0]);
+                    if (dinfo.Length > 1)
+                    {
+                        string name = dinfo[1].Replace("]", "");
+                        lcdInfoBases.Add(new ReactorInfo(this, name));
+                    }
+                }
+                if (data[i].Contains("[JDRIVE:"))
+                {
+                    string[] dinfo = data[i].Split(":"[0]);
+                    if (dinfo.Length > 1)
+                    {
+                        string name = dinfo[1].Replace("]", "");
+                        lcdInfoBases.Add(new JumpDriveInfo(this, name));
+                    }
+                }
                 if (data[i].Contains("[TIMER:"))
                 {
                     string[] dinfo = data[i].Split(":"[0]);
@@ -477,6 +506,33 @@ namespace SEInfoPanels
                     {
                         string name = dinfo[1].Replace("]", "");
                         lcdInfoBases.Add(new TimerInfo(this, name));
+                    }
+                }
+                if (data[i].Contains("[RADAR:"))
+                {
+                    string[] dinfo = data[i].Split(":"[0]);
+                    if (dinfo.Length > 1)
+                    {
+                        string name = dinfo[1].Replace("]", "");
+                        lcdInfoBases.Add(new RadarInfo(this, float.Parse(name)));
+                    }
+                }
+                if (data[i].Contains("[PROG:"))
+                {
+                    string[] dinfo = data[i].Split(":"[0]);
+                    if (dinfo.Length > 1)
+                    {
+                        string name = dinfo[1].Replace("]", "");
+                        lcdInfoBases.Add(new ProgrammableInfo(this, name));
+                    }
+                }
+                if (data[i].Contains("[PROJ:"))
+                {
+                    string[] dinfo = data[i].Split(":"[0]);
+                    if (dinfo.Length > 1)
+                    {
+                        string name = dinfo[1].Replace("]", "");
+                        lcdInfoBases.Add(new ProjectorInfo(this, name));
                     }
                 }
                 if (data[i].Contains("[TURRETS]"))
@@ -523,6 +579,9 @@ namespace SEInfoPanels
 
 
 
+            } else
+            {
+                infoData = "";
             }
             parent.panel.WriteText(infoData, false);
         }
@@ -730,6 +789,408 @@ namespace SEInfoPanels
         {
             name = n;
             count = c;
+        }
+    }
+
+
+    public class ProgrammableInfo : LcdInfoBase
+    {
+        public string programName = "";
+        public IMyProgrammableBlock programmableBlock = null;
+
+        public ProgrammableInfo(GridLcd p, string pname)
+        {
+            parent = p;
+            programName = pname;
+            var progs = parent.parent.grid.GetFatBlocks<IMyProgrammableBlock>();
+            if (progs != null)
+            {
+                List<IMyProgrammableBlock> programs = progs.ToList();
+                programmableBlock = programs.Find(c => c.DisplayNameText == programName);
+                if (programmableBlock != null)
+                {
+                    programmableBlock.OnClose += ProgrammableBlock_OnClose;
+                    programmableBlock.EnabledChanged += ProgrammableBlock_EnabledChanged;
+
+                }
+            }
+        }
+
+        public override void Update()
+        {
+            infoData = "-- Program Block: On -- \n";
+            parent.panel.WriteText(infoData, true);
+        }
+
+        private void ProgrammableBlock_EnabledChanged(IMyTerminalBlock obj)
+        {
+            parent.Update();
+        }
+
+        private void ProgrammableBlock_OnClose(IMyEntity obj)
+        {
+            if (programmableBlock != null && obj != null)
+            {
+                if (programmableBlock.EntityId == obj.EntityId)
+                {
+                    programmableBlock.OnClose -= ProgrammableBlock_OnClose; 
+                    programmableBlock.EnabledChanged -= ProgrammableBlock_EnabledChanged;
+                    programmableBlock = null;
+                }
+            }
+        }
+    }
+
+    public class ProjectorInfo : LcdInfoBase
+    {
+        public string projectorName = "";
+        public IMyProjector projector = null;
+        public List<ItemData> partsData = new List<ItemData>();
+        public ProjectorInfo(GridLcd p, string pname)
+        {
+            parent = p;
+            projectorName = pname;
+            var projs = parent.parent.grid.GetFatBlocks<IMyProjector>();
+            if (projs != null)
+            {
+                List<IMyProjector> projectors = projs.ToList();
+                projector = projectors.Find(c => c.DisplayNameText == projectorName);
+                if (projector != null)
+                {
+                    projector.OnClose += Projector_OnClose;
+
+                }
+            }
+
+        }
+
+        public void GetProjectionParts()
+        {
+            if (partsData == null)
+                return;
+            partsData.Clear();
+
+            IEnumerable<IMyCubeBlock> blocks = projector.ProjectedGrid.GetFatBlocks<IMyCubeBlock>();
+
+            if (blocks == null)
+                return;
+
+            foreach (IMyCubeBlock block in blocks)
+            {
+                if (block == null) continue;
+                var bdef = block.GetObjectBuilderCubeBlock();
+                if (bdef != null)
+                {
+                    if (bdef.ComponentContainer != null)
+                    {
+                        if (bdef.ComponentContainer.Components != null)
+                        {
+                            foreach (var item in bdef.ComponentContainer.Components)
+                            {
+                                if (item != null)
+                                {
+                                    if (item.Component == null)
+                                        continue;
+                                    ItemData itemData = partsData.Find(a => a.name.Contains(item.Component.SubtypeName));
+                                    if (itemData != null)
+                                    {
+                                        itemData.count ++;
+                                    }
+                                    else
+                                    {
+                                        partsData.Add(new ItemData(item.Component.SubtypeName, 1));
+                                    }
+
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        private void Projector_OnClose(IMyEntity obj)
+        {
+            if (projector != null && obj != null)
+            {
+                if (projector.EntityId == obj.EntityId)
+                {
+
+                    projector.OnClose -= Projector_OnClose;
+
+                }
+            }
+        }
+
+        public override void Update()
+        {
+            infoData = "\n";
+            infoData += "Projector Info: "+ projectorName + " \n";
+            if(projector.ProjectedGrid!=null)
+            {
+                GetProjectionParts();
+                infoData += "-- Required Items --" + projectorName + " \n";
+                foreach (var item in partsData)
+                {
+                    infoData += item.name + " x"+item.count+" \n";
+                }
+
+            } else
+            {
+                infoData += "Nothing projected \n";
+            }
+            parent.panel.WriteText(infoData, true);
+        }
+    }
+
+    public class RadarInfo : LcdInfoBase
+    {
+        public float radius = 1;
+        BoundingSphereD bounding;
+        public RadarInfo(GridLcd p)
+        {
+            parent = p;
+            bounding = new BoundingSphereD(parent.parent.grid.GetPosition(), radius);
+            var ants = parent.parent.grid.GetFatBlocks<IMyRadioAntenna>();
+            float nradius = 0;
+            foreach (var item in ants)
+            {
+                if (item.Radius > nradius)
+                    nradius = item.Radius;
+            }
+            if (radius > nradius)
+            {
+                radius = nradius;
+            }
+        }
+
+        public RadarInfo(GridLcd p, float r)
+        {
+            parent = p;
+            radius = r;
+            bounding = new BoundingSphereD(parent.parent.grid.GetPosition(), radius);
+            var ants = parent.parent.grid.GetFatBlocks<IMyRadioAntenna>();
+            float nradius = 0;
+            foreach (var item in ants)
+            {
+                if (item.Radius > nradius)
+                    nradius = item.Radius;
+            }
+            if (radius > nradius)
+            {
+                radius = nradius;
+            }
+        }
+
+
+
+        public override void Update()
+        {
+
+            infoData = "\n";
+            infoData += "-- Nearby Ships -- \n";           
+            bounding = new BoundingSphereD(parent.parent.grid.GetPosition(), radius);
+            List<IMyEntity> entities = MyAPIGateway.Entities.GetEntitiesInSphere(ref bounding);
+            foreach (IMyEntity entity in entities)
+            {
+                if(entity as IMyCubeGrid != null)
+                {
+                    var grid = entity as IMyCubeGrid;
+                    if(grid!=null)
+                    {
+                        if(grid!=parent.parent.grid)
+                        {
+                            infoData += "---------------------------------------- \n";
+                            infoData += "" + grid.DisplayName + ":  ";
+                            long owner = grid.BigOwners.FirstOrDefault();
+                            IMyFaction faction = MyAPIGateway.Session.Factions.TryGetPlayerFaction(owner);
+                            if (faction != null)
+                            {
+                                infoData += faction.Name + "\n";
+
+                                IMyFaction pfaction = MyAPIGateway.Session.Factions.TryGetPlayerFaction(parent.panel.OwnerId);
+                                if (pfaction != null)
+                                {
+                                    infoData += "Status: " + MyAPIGateway.Session.Factions.GetRelationBetweenFactions(faction.FactionId, pfaction.FactionId).ToString() + " \n";
+                                }
+                                
+                            }
+                            else
+                            {
+                                infoData += "\n";
+                            }
+                            infoData += "Distance: " + Math.Round(Vector3.Distance(grid.GetPosition(), parent.parent.grid.GetPosition()) * 0.001, 2) + "km \n";
+                        }
+
+                    }
+                }
+            }
+
+            parent.panel.WriteText(infoData, true);
+        }
+    }
+
+    public class JumpDriveInfo : LcdInfoBase
+    {
+        public IMyJumpDrive jumpDrive = null;
+        public string jumpDriveName = "";
+
+        public JumpDriveInfo(GridLcd p, string n)
+        {
+            parent = p;
+            jumpDriveName = n;
+            var jumps = parent.parent.grid.GetFatBlocks<IMyJumpDrive>();
+            if (jumps != null)
+            {
+                List<IMyJumpDrive> jumpdrives = jumps.ToList();
+                jumpDrive = jumpdrives.Find(c => c.DisplayNameText == jumpDriveName);
+                if (jumpDrive != null)
+                {
+                    jumpDrive.OnClose += JumpDrive_OnClose;
+
+                }
+            }
+        }
+
+        private void JumpDrive_OnClose(IMyEntity obj)
+        {
+            if (jumpDrive != null && obj != null)
+            {
+                if (jumpDrive.EntityId == obj.EntityId)
+                {
+                    jumpDrive.OnClose -= JumpDrive_OnClose;
+                    jumpDrive = null;
+                }
+            }
+        }
+
+        public override void Update()
+        {
+
+            infoData = "\n";
+            infoData += "Jump Drive Info: " + jumpDriveName + " \n";
+            infoData += "Current Jump Distance: " + Math.Round(jumpDrive.JumpDistanceMeters*0.001,2) + "km \n";
+            infoData += "Max Jump Distance: " + Math.Round(jumpDrive.MaxJumpDistanceMeters * 0.001,2) + "km \n";
+            infoData += "Charge: " + jumpDrive.CurrentStoredPower + " | " + jumpDrive.MaxStoredPower + " \n";
+            infoData += "\n";
+            parent.panel.WriteText(infoData, true);
+        }
+    }
+
+    public class ReactorInfo : LcdInfoBase
+    {
+        public IMyReactor reactor = null;
+        public string reactorName = "";
+        public List<ItemData> ingotData = new List<ItemData>();
+        public ReactorInfo(GridLcd p, string n)
+        {
+            parent = p;
+            reactorName = n;
+            var reacts = parent.parent.grid.GetFatBlocks<IMyReactor>();
+            if (reacts != null)
+            {
+                List<IMyReactor> reactors = reacts.ToList();
+                reactor = reactors.Find(c => c.DisplayNameText == reactorName);
+                if (reactor != null)
+                {
+                    reactor.OnClose += Reactor_OnClose;
+
+                }
+            }
+        }
+
+        private void Reactor_OnClose(IMyEntity obj)
+        {
+            if (reactor != null && obj != null)
+            {
+                if (reactor.EntityId == obj.EntityId)
+                {
+                    reactor.OnClose -= Reactor_OnClose;
+                    reactor = null;
+                }
+            }
+        }
+
+        public override void Update()
+        {
+            IMyInventory inv = reactor.GetInventory();
+            if (inv != null)
+            {
+                foreach (var ingot in inv.GetItems())
+                {
+                    if (ingot != null)
+                    {
+                        ItemData ing = ingotData.Find(a => a.name.Contains(ingot.Content.SubtypeName));
+                        if (ing != null)
+                        {
+                            ing.count = ingot.Amount.ToIntSafe();
+                        }
+                        else
+                        {
+                            ingotData.Add(new ItemData(ingot.Content.SubtypeName, ingot.Amount.ToIntSafe()));
+                        }
+
+                    }
+                }
+            }
+
+            infoData = "\n";
+            infoData += "Reactor Info " + reactorName + " \n";
+            infoData += "Output: " + reactor.CurrentOutput + " | " + reactor.MaxOutput + " \n";
+            infoData += "-- Fuel -- \n";
+            foreach (var ingot in ingotData)
+            {
+                infoData += ingot.name + " x " + ingot.count + " \n";
+            }
+
+            parent.panel.WriteText(infoData, true);
+        }
+    }
+
+
+    public class BatteryInfo : LcdInfoBase
+    {
+        public IMyBatteryBlock battery = null;
+        public string batteryName = "";
+
+        public BatteryInfo(GridLcd p, string n)
+        {
+            parent = p;
+            batteryName = n;
+            var batts = parent.parent.grid.GetFatBlocks<IMyBatteryBlock>();
+            if (batts != null)
+            {
+                List<IMyBatteryBlock> batteries = batts.ToList();
+                battery = batteries.Find(c => c.DisplayNameText == batteryName);
+                if (battery != null)
+                {
+                    battery.OnClose += Battery_OnClose;
+
+                }
+            }
+        }
+
+        private void Battery_OnClose(IMyEntity obj)
+        {
+            if (battery != null && obj != null)
+            {
+                if (battery.EntityId == obj.EntityId)
+                {
+                    battery.OnClose -= Battery_OnClose;
+                    battery = null;
+                }
+            }
+        }
+
+        public override void Update()
+        {
+
+            infoData = "\n";
+            infoData += "Battery Info " + batteryName + " \n";
+            infoData += "Mode: " + battery.ChargeMode.ToString() + " \n";
+            infoData += "Charge: " + battery.CurrentStoredPower + " | "+battery.MaxStoredPower+" \n";
+            infoData += "\n";
+            parent.panel.WriteText(infoData, true);
         }
     }
 
