@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Sandbox.Common.ObjectBuilders.Definitions;
+using Sandbox.Definitions;
 using Sandbox.Game;
 using Sandbox.ModAPI;
 using Sandbox.ModAPI.Interfaces;
@@ -22,10 +23,13 @@ namespace SEInfoPanels
     {
 
         List<GridLcds> grids = new List<GridLcds>();
-        int updatePanels = 0;
-
+        bool isServer = false;
         public override void Init(MyObjectBuilder_SessionComponent sessionComponent)
         {
+            isServer = MyAPIGateway.Session.IsServer;
+
+            if (!isServer)
+                return;
 
             HashSet<IMyEntity> entities = new HashSet<IMyEntity>();
             MyAPIGateway.Entities.GetEntities(entities);
@@ -64,24 +68,6 @@ namespace SEInfoPanels
             MyAPIGateway.Entities.OnEntityRemove += Entities_OnEntityRemove;
             base.Init(sessionComponent);
         }
-
-
-        public override void UpdateBeforeSimulation()
-        {
-            /*
-            if (updatePanels >= 100)
-            {
-                foreach (var grid in grids)
-                {
-                    grid.Update();
-                }
-                updatePanels = 0;
-            }
-            updatePanels++;
-            */
-            base.UpdateBeforeSimulation();
-        }
-
 
         private void Entities_OnEntityRemove(IMyEntity obj)
         {
@@ -535,6 +521,24 @@ namespace SEInfoPanels
                         lcdInfoBases.Add(new ProjectorInfo(this, name));
                     }
                 }
+                if (data[i].Contains("[CONN:"))
+                {
+                    string[] dinfo = data[i].Split(":"[0]);
+                    if (dinfo.Length > 1)
+                    {
+                        string name = dinfo[1].Replace("]", "");
+                        lcdInfoBases.Add(new ConnectorInfo(this, name));
+                    }
+                }
+                if (data[i].Contains("[CRYO:"))
+                {
+                    string[] dinfo = data[i].Split(":"[0]);
+                    if (dinfo.Length > 1)
+                    {
+                        string name = dinfo[1].Replace("]", "");
+                        lcdInfoBases.Add(new CryoInfo(this, name));
+                    }
+                }
                 if (data[i].Contains("[TURRETS]"))
                 {
                    lcdInfoBases.Add(new TurretInfo(this));
@@ -569,13 +573,14 @@ namespace SEInfoPanels
             {
                 infoData = "ENCOM OS v1.0 \n";
                 infoData += "-- Basic Commands -- \n";
-                infoData += "Cargo Info: [CINFO:CargoBox Name] \n";
-                infoData += "Assembler Info: [AINFO:Assembler Name] \n";
-                infoData += "Refinery Info: [RINFO:Refinery Name] \n";
-                infoData += "Turrets Info: [TURRETS] \n";
-                infoData += "Additional Commands: [HELP] \n";
+                infoData += "Cargo Info: [GRIDINFO]|[CINFO:CargoBox Name] \n";
+                infoData += "Assembler Info: [GRIDINFO]|[AINFO:Assembler Name] \n";
+                infoData += "Refinery Info: [GRIDINFO]|[RINFO:Refinery Name] \n";
+                infoData += "Turrets Info: [GRIDINFO]|[TURRETS] \n";
+                infoData += "Additional Commands: [GRIDINFO]|[HELP] \n";
                 infoData += " \n";
                 infoData += "Multiple commands can be added \n seperate with | \n";
+                infoData += "e.g. [GRIDINFO]|[CINFO:cname]|[AINFO:aname] \n";
 
 
 
@@ -597,6 +602,73 @@ namespace SEInfoPanels
         public override void Update()
         {
             infoData = "-- Additional Commands -- \n";
+            infoData += "[BINFO:Battery Name] \n";
+            infoData += "[REACTOR:Reactor Name] \n";
+            infoData += "[JDRIVE:JumpDrive Name] \n";
+            infoData += "[RADAR:Max Range meters] \n";
+            infoData += "[PROJ:Projector Name] \n";
+            infoData += "[CONN:Connector Name] \n";
+            infoData += "[CRYO:Cryo Name] \n";
+            infoData += "[TURRETS] \n";
+            infoData += "[PROG:Programable block name] \n";
+            infoData += "Programmable block is used to force update \n";
+            infoData += "the panel. Use a timer to toggle power on \n";
+            infoData += "the specified programmable block to cause the \n";
+            infoData += "panel to update the values. \n";
+
+            parent.panel.WriteText(infoData, true);
+        }
+    }
+
+    public class ConnectorInfo : LcdInfoBase
+    {
+        public IMyShipConnector connector = null;
+        public string connectorName = "";
+
+        public ConnectorInfo(GridLcd p, string n)
+        {
+            parent = p;
+            connectorName = n;
+            var conns = parent.parent.grid.GetFatBlocks<IMyShipConnector>();
+            if (conns != null)
+            {
+                List<IMyShipConnector> connectors = conns.ToList();
+                connector = connectors.Find(c => c.DisplayNameText == connectorName);
+                if (connector != null)
+                {
+                    connector.OnClose += Connector_OnClose;
+                }
+
+            }
+        }
+
+        private void Connector_OnClose(IMyEntity obj)
+        {
+            if (connector != null && obj != null)
+            {
+                if (connector.EntityId == obj.EntityId)
+                {
+                    connector.OnClose -= Connector_OnClose;
+                    connector = null;
+                }
+            }
+        }
+
+        public override void Update()
+        {
+            infoData = "Connector Info : " + connectorName + " \n";
+            infoData += "Status : " + connector.Status.ToString() + " \n";
+            infoData += "Throw Out : " + connector.ThrowOut + " \n";
+            infoData += "Collect All : " + connector.CollectAll + " \n";
+            infoData += "-- Connection -- \n";
+            if(connector.OtherConnector != null)
+            {
+                infoData += "Connected: " + connector.OtherConnector.CubeGrid.DisplayName + "\n";
+            } else
+            {
+                infoData += "-- No Ship Attached -- \n";
+            }
+
             parent.panel.WriteText(infoData, true);
         }
     }
@@ -730,6 +802,61 @@ namespace SEInfoPanels
             parent.panel.WriteText(infoData, true);
         }
     }
+
+    public class CryoInfo : LcdInfoBase
+    {
+        public IMyCryoChamber cryoChamber = null;
+        public string cryoname = "";
+
+        public CryoInfo(GridLcd p, string n)
+        {
+            parent = p;
+            cryoname = n;
+            var cryos = parent.parent.grid.GetFatBlocks<IMyCryoChamber>();
+            if (cryos != null)
+            {
+                List<IMyCryoChamber> cryochambers = cryos.ToList();
+                cryoChamber = cryochambers.Find(c => c.DisplayNameText == cryoname);
+                if (cryoChamber != null)
+                {
+                    cryoChamber.OnClose += CryoChamber_OnClose; ;
+
+                }
+            }
+        }
+
+        private void CryoChamber_OnClose(IMyEntity obj)
+        {
+            if (cryoChamber != null && obj != null)
+            {
+                if (cryoChamber.EntityId == obj.EntityId)
+                {
+                    cryoChamber.OnClose -= CryoChamber_OnClose;
+                    cryoChamber = null;
+                }
+            }
+        }
+
+        public override void Update()
+        {
+            
+            infoData = "\n";
+            infoData += "---------------------------------------- \n";
+            infoData += "Cryo: " + cryoChamber.DisplayNameText + " \n";
+            infoData += "Oxygen: " + Math.Round(cryoChamber.OxygenCapacity*100.0f,2) + "% \n";
+            var pilot = cryoChamber.Pilot;
+            if(pilot!= null)
+            {
+                infoData += "Occupied: "+pilot.DisplayName+" \n";
+            } else
+            {
+                infoData += "-- Not Occupied -- \n";
+            }
+            infoData += "---------------------------------------- \n";
+            parent.panel.WriteText(infoData, true);
+        }
+    }
+
 
     public class TimerInfo : LcdInfoBase
     {
@@ -871,42 +998,32 @@ namespace SEInfoPanels
             partsData.Clear();
 
             IEnumerable<IMyCubeBlock> blocks = projector.ProjectedGrid.GetFatBlocks<IMyCubeBlock>();
-
+            
             if (blocks == null)
                 return;
+            partsData.Add(new ItemData("Block Count: ", blocks.Count()));
 
             foreach (IMyCubeBlock block in blocks)
             {
                 if (block == null) continue;
-                var bdef = block.GetObjectBuilderCubeBlock();
-                if (bdef != null)
+                MyCubeBlockDefinition cdef = (MyCubeBlockDefinition)block.SlimBlock.BlockDefinition;
+                if(cdef != null)
                 {
-                    if (bdef.ComponentContainer != null)
+                    foreach (var item in cdef.Components)
                     {
-                        if (bdef.ComponentContainer.Components != null)
+                        ItemData data = partsData.Find(pd => pd.name.Contains(item.Definition.DisplayNameText));
+                        if(data == null)
                         {
-                            foreach (var item in bdef.ComponentContainer.Components)
-                            {
-                                if (item != null)
-                                {
-                                    if (item.Component == null)
-                                        continue;
-                                    ItemData itemData = partsData.Find(a => a.name.Contains(item.Component.SubtypeName));
-                                    if (itemData != null)
-                                    {
-                                        itemData.count ++;
-                                    }
-                                    else
-                                    {
-                                        partsData.Add(new ItemData(item.Component.SubtypeName, 1));
-                                    }
-
-                                }
-                            }
+                            partsData.Add(new ItemData(item.Definition.DisplayNameText, item.Count));
+                        } else
+                        {
+                            data.count += item.Count;
                         }
+                        
                     }
                 }
             }
+            
         }
 
         private void Projector_OnClose(IMyEntity obj)
@@ -928,6 +1045,7 @@ namespace SEInfoPanels
             infoData += "Projector Info: "+ projectorName + " \n";
             if(projector.ProjectedGrid!=null)
             {
+                infoData += "Blueprint Loaded: " + projector.ProjectedGrid.DisplayName + " \n";
                 GetProjectionParts();
                 infoData += "-- Required Items --" + projectorName + " \n";
                 foreach (var item in partsData)
