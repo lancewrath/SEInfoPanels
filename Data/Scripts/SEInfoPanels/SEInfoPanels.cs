@@ -650,12 +650,14 @@ namespace SEInfoPanels
                 {
                     connector.OnClose -= Connector_OnClose;
                     connector = null;
+                    parent.lcdInfoBases.Remove(this);
                 }
             }
         }
 
         public override void Update()
         {
+            if (connector == null) return;
             infoData = "Connector Info : " + connectorName + " \n";
             infoData += "Status : " + connector.Status.ToString() + " \n";
             infoData += "Throw Out : " + connector.ThrowOut + " \n";
@@ -704,12 +706,14 @@ namespace SEInfoPanels
                 {
                     container.OnClose -= Container_OnClose;
                     container = null;
+                    parent.lcdInfoBases.Remove(this);
                 }
             }
         }
 
         public override void Update()
         {
+            if (container == null) return;
             infoData = "Cargo Info : " + containerName + " \n";
             infoData += "-- Inventory -- \n";
 
@@ -731,7 +735,7 @@ namespace SEInfoPanels
     {
         public IMyAssembler assembler = null;
         public string assemblerName = "";
-
+        public string status = "";
         public AssemblerInfo(GridLcd p, string n)
         {
             parent = p;
@@ -761,11 +765,31 @@ namespace SEInfoPanels
 
         private void Assembler_CurrentProgressChanged(IMyAssembler obj)
         {
+            List<MyProductionQueueItem> q = obj.GetQueue();
+            if(q != null)
+            {
+                if(q.Count > 0)
+                {                    
+                    status = q[0].Blueprint.DisplayNameText+" x "+ q[0].Amount+" - " + obj.CurrentProgress + "%";
+                } else
+                {
+                    status = "Finished";
+                }
+            }    
+            
             parent.Update();
         }
 
         private void Assembler_CurrentModeChanged(IMyAssembler obj)
         {
+            if(obj.Mode==Sandbox.ModAPI.Ingame.MyAssemblerMode.Assembly)
+            {
+                status = "Assembling";
+            } else
+            {
+                status = "Disassembling";
+            }
+            
             parent.Update();
         }
 
@@ -782,23 +806,27 @@ namespace SEInfoPanels
                     assembler.CurrentProgressChanged -= Assembler_CurrentProgressChanged;
                     assembler.CurrentStateChanged -= Assembler_CurrentStateChanged;
                     assembler = null;
+                    parent.lcdInfoBases.Remove(this);
                 }
             }
         }
 
         private void Assembler_StartedProducing()
         {
+            status = "Starting";
             parent.Update();
         }
 
         private void Assembler_StoppedProducing()
         {
+            status = "Stopped";
             parent.Update();
         }
 
         public override void Update()
         {
-            infoData = "Assembler Info " + assemblerName + " \n";
+            if (assembler == null) return;
+            infoData = "Assembler Info " + assemblerName + ": "+ status+" \n";
             parent.panel.WriteText(infoData, true);
         }
     }
@@ -833,13 +861,15 @@ namespace SEInfoPanels
                 {
                     cryoChamber.OnClose -= CryoChamber_OnClose;
                     cryoChamber = null;
+                    parent.lcdInfoBases.Remove(this);
                 }
+
             }
         }
 
         public override void Update()
         {
-            
+            if (cryoChamber == null) return;
             infoData = "\n";
             infoData += "---------------------------------------- \n";
             infoData += "Cryo: " + cryoChamber.DisplayNameText + " \n";
@@ -883,6 +913,7 @@ namespace SEInfoPanels
 
         public override void Update()
         {
+            if (timer == null) return;
             infoData = "Timed Update: On \n";
             parent.panel.WriteText(infoData, true);
         }
@@ -902,6 +933,7 @@ namespace SEInfoPanels
                     timer.OnClose -= Timer_OnClose;
                     timer.UpdateTimerTriggered -= Timer_UpdateTimerTriggered;
                     timer = null;
+                    parent.lcdInfoBases.Remove(this);
                 }
             }
         }
@@ -945,6 +977,7 @@ namespace SEInfoPanels
 
         public override void Update()
         {
+            if (programmableBlock == null) return;
             infoData = "-- Program Block: On -- \n";
             parent.panel.WriteText(infoData, true);
         }
@@ -963,6 +996,7 @@ namespace SEInfoPanels
                     programmableBlock.OnClose -= ProgrammableBlock_OnClose; 
                     programmableBlock.EnabledChanged -= ProgrammableBlock_EnabledChanged;
                     programmableBlock = null;
+                    parent.lcdInfoBases.Remove(this);
                 }
             }
         }
@@ -1034,6 +1068,7 @@ namespace SEInfoPanels
                 {
 
                     projector.OnClose -= Projector_OnClose;
+                    parent.lcdInfoBases.Remove(this);
 
                 }
             }
@@ -1041,6 +1076,7 @@ namespace SEInfoPanels
 
         public override void Update()
         {
+            if (projector == null) return;
             infoData = "\n";
             infoData += "Projector Info: "+ projectorName + " \n";
             if(projector.ProjectedGrid!=null)
@@ -1178,13 +1214,14 @@ namespace SEInfoPanels
                 {
                     jumpDrive.OnClose -= JumpDrive_OnClose;
                     jumpDrive = null;
+                    parent.lcdInfoBases.Remove(this);
                 }
             }
         }
 
         public override void Update()
         {
-
+            if (jumpDrive == null) return;
             infoData = "\n";
             infoData += "Jump Drive Info: " + jumpDriveName + " \n";
             infoData += "Current Jump Distance: " + Math.Round(jumpDrive.JumpDistanceMeters*0.001,2) + "km \n";
@@ -1225,12 +1262,14 @@ namespace SEInfoPanels
                 {
                     reactor.OnClose -= Reactor_OnClose;
                     reactor = null;
+                    parent.lcdInfoBases.Remove(this);
                 }
             }
         }
 
         public override void Update()
         {
+            if (reactor == null) return;
             IMyInventory inv = reactor.GetInventory();
             if (inv != null)
             {
@@ -1296,13 +1335,14 @@ namespace SEInfoPanels
                 {
                     battery.OnClose -= Battery_OnClose;
                     battery = null;
+                    parent.lcdInfoBases.Remove(this);
                 }
             }
         }
 
         public override void Update()
         {
-
+            if (battery == null) return;
             infoData = "\n";
             infoData += "Battery Info " + batteryName + " \n";
             infoData += "Mode: " + battery.ChargeMode.ToString() + " \n";
@@ -1442,12 +1482,14 @@ namespace SEInfoPanels
                     refinery.StartedProducing -= Refinery_StartedProducing;
                     refinery.StoppedProducing -= Refinery_StoppedProducing;
                     refinery = null;
+                    parent.lcdInfoBases.Remove(this);
                 }
             }
         }
 
         public override void Update()
         {
+            if (refinery == null) return;
             infoData = "Refinery Info " + refineryName + " \n";
             if(refinery.IsProducing)
             {
